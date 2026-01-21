@@ -2,6 +2,10 @@
 
 一个引导式观察工具，通过"如实观照"帮助用户看清什么是"对的事情"，并停止那些"错的事情"。基于段永平"本分"与"平常心"哲学。
 
+🌐 **在线访问：** [https://essence-logic.ai-builders.space/](https://essence-logic.ai-builders.space/)  
+📚 **API 文档：** [https://essence-logic.ai-builders.space/docs](https://essence-logic.ai-builders.space/docs)  
+📦 **GitHub 仓库：** [https://github.com/muuya/essence-logic](https://github.com/muuya/essence-logic)
+
 ## 产品理念
 
 在日常生活中，我们在面对决策、挫折或诱惑时，往往被**贪婪、恐惧、虚荣或短视**所蒙蔽。这些噪音掩盖了事情的本质，让我们偏离了"本分"，失去了"平常心"。
@@ -140,6 +144,14 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 - 健康检查：http://localhost:8000/health
 - 配置重载（仅开发环境）：http://localhost:8000/api/reload-config
 
+## 🌐 在线访问
+
+项目已成功部署到 AI Builders Space，可以直接访问：
+
+- **主页：** https://essence-logic.ai-builders.space/
+- **API 文档：** https://essence-logic.ai-builders.space/docs
+- **健康检查：** https://essence-logic.ai-builders.space/health
+
 ## 部署到 AI Builders Space
 
 项目已集成 AI Builders API 部署功能，可以一键部署到生产环境。
@@ -204,6 +216,12 @@ python deploy.py --list
 ```bash
 python deploy.py --status <deployment_id>
 ```
+
+### 部署状态
+
+当前部署状态：✅ **HEALTHY**  
+部署地址：https://essence-logic.ai-builders.space/  
+GitHub 仓库：https://github.com/muuya/essence-logic
 
 ### 详细文档
 
@@ -326,8 +344,17 @@ guide/
 **目标三：极简的用户体验**
 - 响应速度极快，且没有任何多余的 UI 装饰，体现"本分"的产品观
 
+## 项目链接
+
+- 🌐 **在线访问：** [https://essence-logic.ai-builders.space/](https://essence-logic.ai-builders.space/)
+- 📚 **API 文档：** [https://essence-logic.ai-builders.space/docs](https://essence-logic.ai-builders.space/docs)
+- 📦 **GitHub 仓库：** [https://github.com/muuya/essence-logic](https://github.com/muuya/essence-logic)
+- 📋 **部署指南：** [部署指南](./部署指南.md)
+- 📄 **产品定义：** [产品定义简报](./产品定义简报.md)
+
 ## 参考资源
 
 - [uv 文档](https://github.com/astral-sh/uv)
 - [FastAPI 文档](https://fastapi.tiangolo.com/)
+- [AI Builders API 文档](https://space.ai-builders.com/backend/openapi.json)
 - [产品定义简报](./产品定义简报.md)
