@@ -657,9 +657,11 @@ async def get_feedback_stats():
 
 if __name__ == "__main__":
     import uvicorn
+    # 支持 PORT 环境变量（Koyeb 部署要求）
+    port = int(os.getenv("PORT", 8000))
     logger.info("=" * 60)
     logger.info("启动 FastAPI 服务器")
-    logger.info(f"监听地址: 0.0.0.0:8000")
+    logger.info(f"监听地址: 0.0.0.0:{port}")
     logger.info(f"AI 服务类型: {os.getenv('AI_SERVICE', 'test')}")
     logger.info("=" * 60)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=port)
