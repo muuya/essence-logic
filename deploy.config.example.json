@@ -1,0 +1,16 @@
+{
+  "name": "essence-logic",
+  "display_name": "本质看板",
+  "description": "基于段永平'本分'与'平常心'哲学的本质看板系统——一面清澈的镜子，帮助用户通过'如实观照'看清本质",
+  "version": "4.0.0",
+  "environment": "production",
+  "config": {
+    "port": 8000,
+    "workers": 4,
+    "log_level": "info"
+  },
+  "env_vars": {
+    "ENVIRONMENT": "production",
+    "AI_SERVICE": "test"
+  }
+}
