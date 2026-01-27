@@ -58,39 +58,12 @@ uv sync
 
 项目支持两种 AI 服务模式，通过 `AI_SERVICE` 环境变量配置：
 
-**1. DeepSeek 直接调用模式（AI_SERVICE=deepseek）**
+- **DeepSeek 直接调用模式**：`AI_SERVICE=deepseek`，需要设置 `DEEPSEEK_API_KEY`
+- **AI Builders API 模式**（默认）：`AI_SERVICE=test`，需要设置 `AI_BUILDER_TOKEN`
 
-```bash
-AI_SERVICE=deepseek
-DEEPSEEK_API_KEY=sk-aa2772f56bf64e309bd3fd1885a03948
-```
+**推荐方法：** 在项目根目录创建 `.env` 文件进行配置。
 
-**2. AI Builders API 模式（AI_SERVICE=test，默认）**
-
-```bash
-AI_SERVICE=test
-AI_BUILDER_TOKEN=your_token_here
-```
-
-**推荐方法：使用 .env 文件**
-
-编辑项目根目录下的 `.env` 文件，根据你的需求配置：
-```bash
-# 选择服务类型
-AI_SERVICE=deepseek  # 或 test
-
-# DeepSeek 配置（当 AI_SERVICE=deepseek 时）
-DEEPSEEK_API_KEY=sk-aa2772f56bf64e309bd3fd1885a03948
-
-# AI Builders 配置（当 AI_SERVICE=test 时）
-AI_BUILDER_TOKEN=your_token_here
-```
-
-**或者使用环境变量：**
-```bash
-export AI_SERVICE="deepseek"
-export DEEPSEEK_API_KEY="sk-aa2772f56bf64e309bd3fd1885a03948"
-```
+**详细配置说明：** 请参考 [环境变量管理指南](./环境变量管理指南.md)
 
 **注意**: API Key 和 Token 不要提交到 Git，`.env` 文件已在 `.gitignore` 中。
 
@@ -113,16 +86,8 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 **开发模式特性：**
 - ✅ 代码修改自动重载（无需手动重启）
 - ✅ 环境变量修改后调用 `POST /api/reload-config` 即可生效，无需重启
-- ✅ 自动检测 `.env` 文件变化
 
-**修改环境变量后的操作：**
-
-1. 修改 `.env` 文件
-2. 调用重载接口：
-   ```bash
-   curl -X POST http://localhost:8000/api/reload-config
-   ```
-3. 或访问 Swagger UI：http://localhost:8000/docs，找到 `/api/reload-config` 端点并执行
+**详细说明：** 请参考 [环境变量管理指南](./环境变量管理指南.md)
 
 ### 生产模式
 
@@ -156,76 +121,58 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 项目已集成 AI Builders API 部署功能，可以一键部署到生产环境。
 
-### 前置要求
+### 首次部署
 
-1. **设置 AI Builders Token**
+**快速部署：**
+```bash
+python deploy.py --repo-url https://github.com/muuya/essence-logic --service-name essence-logic --branch main
+```
+
+### 更新部署（代码更新后）
+
+当代码有更新时，按以下步骤重新部署：
+
+1. **提交代码到 GitHub**
    ```bash
-   export AI_BUILDER_TOKEN='your_token_here'
+   git add .
+   git commit -m "更新说明"
+   git push origin main
    ```
-   或在 `.env` 文件中配置：
+
+2. **触发重新部署**
    ```bash
-   AI_BUILDER_TOKEN=your_token_here
+   python deploy.py --repo-url https://github.com/muuya/essence-logic --service-name essence-logic --branch main
    ```
 
-2. **确保项目可正常运行**
+   或者使用配置文件：
    ```bash
-   ./dev.sh  # 测试本地运行
+   # 创建或更新 deploy.config.json
+   {
+     "repo_url": "https://github.com/muuya/essence-logic",
+     "service_name": "essence-logic",
+     "branch": "main",
+     "port": 8000
+   }
+   
+   # 部署
+   python deploy.py --config deploy.config.json
    ```
 
-### 快速部署
+3. **查看部署状态**
+   ```bash
+   python deploy.py --status essence-logic
+   ```
 
-**基本部署（使用默认配置）：**
-```bash
-python deploy.py
-```
+**提示：**
+- 部署通常需要 5-10 分钟
+- 部署完成后，新代码会自动生效
+- 可以使用 `--no-wait` 参数不等待部署完成
 
-**使用自定义配置：**
-```bash
-# 1. 复制配置示例
-cp deploy.config.example.json deploy.config.json
+**当前部署状态：** ✅ **HEALTHY**  
+**部署地址：** https://essence-logic.ai-builders.space/  
+**GitHub 仓库：** https://github.com/muuya/essence-logic
 
-# 2. 编辑配置文件（可选）
-# 修改 deploy.config.json
-
-# 3. 使用配置文件部署
-python deploy.py --config deploy.config.json
-```
-
-**指定项目名称：**
-```bash
-python deploy.py --project-name my-essence-logic
-```
-
-### 部署选项
-
-- `--config <path>`: 指定配置文件路径
-- `--no-wait`: 不等待部署完成（立即返回）
-- `--timeout <seconds>`: 设置等待超时时间（默认300秒）
-- `--list`: 列出所有部署
-- `--status <deployment_id>`: 查询指定部署的状态
-- `--project-name <name>`: 指定项目名称
-
-### 部署管理
-
-**列出所有部署：**
-```bash
-python deploy.py --list
-```
-
-**查询部署状态：**
-```bash
-python deploy.py --status <deployment_id>
-```
-
-### 部署状态
-
-当前部署状态：✅ **HEALTHY**  
-部署地址：https://essence-logic.ai-builders.space/  
-GitHub 仓库：https://github.com/muuya/essence-logic
-
-### 详细文档
-
-更多部署信息请参考：[部署指南](./部署指南.md)
+**详细部署文档：** 请参考 [部署指南](./部署指南.md)
 
 ## API 使用
 
@@ -288,33 +235,9 @@ guide/
 
 ## 系统提示词
 
-系统提示词定义了 Chatbot 的行为准则，基于段永平"本分"与"平常心"哲学。详细内容请查看 `src/system_prompt.py` 和 `产品定义简报.md`。
+系统提示词定义了 Chatbot 的行为准则，基于段永平"本分"与"平常心"哲学。详细内容请查看 `src/system_prompt.py` 和 [产品定义简报](./产品定义简报.md)。
 
 ## 开发工作流
-
-### 环境变量管理最佳实践
-
-**问题：** 修改 `.env` 文件后需要重启服务器才能生效，很不方便。
-
-**解决方案：**
-
-1. **开发环境使用 `dev.sh` 启动**
-   ```bash
-   ./dev.sh
-   ```
-
-2. **修改 `.env` 文件后，调用重载接口**
-   ```bash
-   curl -X POST http://localhost:8000/api/reload-config
-   ```
-   或者访问 http://localhost:8000/docs 使用 Swagger UI 调用
-
-3. **代码修改会自动重载**（uvicorn --reload）
-
-**工作原理：**
-- 开发环境（`ENVIRONMENT=development`）每次请求都会重新加载 `.env` 文件
-- 生产环境（`ENVIRONMENT=production`）只在启动时加载一次，性能更好
-- `/api/reload-config` 端点可以手动触发配置重载（仅开发环境）
 
 ### 基本开发流程
 
