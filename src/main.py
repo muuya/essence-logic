@@ -381,6 +381,7 @@ async def chat(request: ChatRequest, http_request: Request):
             async def generate():
                 chunk_count = 0
                 total_content_length = 0
+                full_response_content = ""  # 用于收集完整响应
                 try:
                     stream_gen = stream_client.async_chat_completion(
                         model=normalized_model,
@@ -397,6 +398,7 @@ async def chat(request: ChatRequest, http_request: Request):
                             content = delta.get('content', '')
                             if content:
                                 total_content_length += len(content)
+                                full_response_content += content  # 累积完整响应
                                 # 立即发送每个内容块，确保实时传输
                                 event_data = json.dumps({'content': content, 'done': False}, ensure_ascii=False)
                                 yield f"data: {event_data}\n\n"
@@ -416,6 +418,16 @@ async def chat(request: ChatRequest, http_request: Request):
                         f"流式响应完成 | IP: {client_ip} | "
                         f"耗时: {elapsed_time:.2f}s | 块数: {chunk_count} | 总长度: {total_content_length}"
                     )
+                    
+                    # 保存对话记录
+                    if total_content_length > 0 and full_response_content:
+                        user_msg = last_user_message if last_user_message else (request.messages[-1].content if request.messages and request.messages[-1].role == "user" else "")
+                        save_chat_history(
+                            user_message=user_msg,
+                            assistant_message=full_response_content,
+                            client_ip=client_ip,
+                            message_count=message_count
+                        )
                 except Exception as e:
                     import traceback
                     error_msg = str(e)
@@ -473,6 +485,14 @@ async def chat(request: ChatRequest, http_request: Request):
             )
             logger.debug(f"响应内容预览 | {response_preview}")
             
+            # 保存对话记录
+            save_chat_history(
+                user_message=last_user_message if last_user_message else request.messages[-1].content if request.messages else "",
+                assistant_message=assistant_message,
+                client_ip=client_ip,
+                message_count=message_count
+            )
+            
             return ChatResponse(
                 message=ChatMessage(
                     role="assistant",
@@ -505,6 +525,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 FEEDBACK_FILE = DATA_DIR / "feedback.json"
 SCENARIO_FILE = DATA_DIR / "scenarios.json"
+CHAT_HISTORY_FILE = DATA_DIR / "chat_history.json"
 
 
 def load_json_file(file_path: Path, default: list = None):
@@ -538,6 +559,41 @@ def save_json_file(file_path: Path, data: list):
     except Exception as e:
         logger.error(f"保存文件失败 {file_path}: {e}")
         return False
+
+
+def save_chat_history(user_message: str, assistant_message: str, client_ip: str, message_count: int):
+    """
+    保存对话记录
+    
+    Args:
+        user_message: 用户消息
+        assistant_message: AI 回复
+        client_ip: 客户端 IP
+        message_count: 消息数量（对话轮数）
+    """
+    try:
+        chat_history = load_json_file(CHAT_HISTORY_FILE, [])
+        
+        chat_record = {
+            "timestamp": datetime.now().isoformat(),
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+            "client_ip": client_ip,
+            "message_count": message_count,
+            "user_message_length": len(user_message),
+            "assistant_message_length": len(assistant_message)
+        }
+        
+        chat_history.append(chat_record)
+        
+        # 只保留最近 1000 条记录（避免文件过大）
+        if len(chat_history) > 1000:
+            chat_history = chat_history[-1000:]
+        
+        if save_json_file(CHAT_HISTORY_FILE, chat_history):
+            logger.debug(f"对话记录已保存 | IP: {client_ip} | 消息数: {message_count}")
+    except Exception as e:
+        logger.error(f"保存对话记录失败: {e}")
 
 
 @app.post("/api/feedback")
@@ -653,6 +709,40 @@ async def get_feedback_stats():
     }
     
     return stats
+
+
+@app.get("/api/chat/history")
+async def get_chat_history(limit: int = 50, offset: int = 0):
+    """
+    获取对话记录（仅开发环境）
+    
+    Args:
+        limit: 返回记录数量（默认50，最大100）
+        offset: 偏移量（默认0）
+    """
+    if not IS_DEV:
+        raise HTTPException(status_code=403, detail="此功能仅在开发环境中可用")
+    
+    chat_history = load_json_file(CHAT_HISTORY_FILE, [])
+    
+    # 确保是列表
+    if not isinstance(chat_history, list):
+        chat_history = []
+    
+    # 限制最大返回数量
+    limit = min(limit, 100)
+    
+    # 返回最新的记录（倒序）
+    total = len(chat_history)
+    start = max(0, total - offset - limit)
+    end = total - offset
+    
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "records": chat_history[start:end][::-1]  # 倒序，最新的在前
+    }
 
 
 if __name__ == "__main__":
