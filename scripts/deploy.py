@@ -11,8 +11,12 @@ import argparse
 from pathlib import Path
 from typing import Optional, Dict
 
-# 添加 src 目录到路径
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+# 添加 src 目录到路径（脚本在 scripts/ 目录，需要回到项目根目录）
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / "src"))
+
+# 切换到项目根目录（确保相对路径正确）
+os.chdir(project_root)
 
 try:
     from dotenv import load_dotenv
@@ -33,9 +37,22 @@ def load_project_config(config_path: Optional[str] = None) -> Dict:
     Returns:
         项目配置字典
     """
-    if config_path and os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+    if config_path:
+        # 如果是相对路径，尝试多个位置
+        if not os.path.isabs(config_path):
+            # 1. 当前目录
+            if os.path.exists(config_path):
+                pass
+            # 2. config/ 目录
+            elif os.path.exists(f"config/{config_path}"):
+                config_path = f"config/{config_path}"
+            # 3. 项目根目录
+            elif os.path.exists(f"../{config_path}"):
+                config_path = f"../{config_path}"
+        
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
     
     # 默认配置
     return {
@@ -187,7 +204,7 @@ def deploy_project(
             print(f"⏱️  超时: 部署未在 {timeout} 秒内完成")
             print(f"   服务名: {service_name}")
             print(f"   请稍后使用以下命令查询状态:")
-            print(f"   python deploy.py --status {service_name}")
+            print(f"   python scripts/deploy.py --status {service_name}")
             return {"service_name": service_name, "status": "timeout"}
         else:
             return deploy_response
@@ -311,21 +328,34 @@ def main():
         repo_url = args.repo_url
         service_name = args.service_name
         
+        # 处理配置文件路径
+        config_path = args.config
+        if config_path:
+            # 如果没有指定路径，尝试默认位置
+            if not os.path.exists(config_path):
+                # 尝试 config/ 目录
+                alt_path = project_root / "config" / os.path.basename(config_path)
+                if alt_path.exists():
+                    config_path = str(alt_path)
+                # 尝试项目根目录
+                elif (project_root / os.path.basename(config_path)).exists():
+                    config_path = str(project_root / os.path.basename(config_path))
+        
         if not repo_url:
             # 尝试从配置文件读取
-            project_config = load_project_config(args.config)
+            project_config = load_project_config(config_path)
             repo_url = project_config.get("repo_url")
         
         if not repo_url:
             print("❌ 错误: 需要提供 Git 仓库 URL")
             print("   使用方法:")
-            print("   python deploy.py --repo-url https://github.com/user/repo --service-name my-app")
+            print("   python scripts/deploy.py --repo-url https://github.com/user/repo --service-name my-app")
             print("   或在配置文件中设置 repo_url")
             sys.exit(1)
         
         if not service_name:
             # 尝试从配置文件或项目名生成
-            project_config = load_project_config(args.config)
+            project_config = load_project_config(config_path)
             service_name = project_config.get("service_name") or project_config.get("name", "essence-logic")
             # 确保服务名符合要求（小写、数字、连字符，3-32字符）
             import re
@@ -336,8 +366,8 @@ def main():
         
         # 加载环境变量（如果有配置文件）
         env_vars = None
-        if args.config:
-            project_config = load_project_config(args.config)
+        if config_path:
+            project_config = load_project_config(config_path)
             if project_config.get("env_vars"):
                 env_vars = project_config["env_vars"]
         

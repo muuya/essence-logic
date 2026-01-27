@@ -51,3 +51,4 @@ build/
 *.egg-info/
 deploy.config.json
 ADMIN_TOKEN.txt
+config/deploy.config.json

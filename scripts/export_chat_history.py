@@ -15,8 +15,10 @@ def get_admin_token():
     if token:
         return token
     
-    # 从文件读取
-    token_file = Path("ADMIN_TOKEN.txt")
+    # 从文件读取（脚本在 scripts/ 目录，需要回到项目根目录）
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    token_file = project_root / "ADMIN_TOKEN.txt"
     if token_file.exists():
         with open(token_file, 'r', encoding='utf-8') as f:
             for line in f:
@@ -81,8 +83,10 @@ def export_chat_history():
         print("\n⚠️  没有找到对话记录")
         return None
     
-    # 创建备份目录
-    backup_dir = Path("backups")
+    # 创建备份目录（在项目根目录）
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    backup_dir = project_root / "backups"
     backup_dir.mkdir(exist_ok=True)
     
     # 保存到文件
