@@ -712,16 +712,34 @@ async def get_feedback_stats():
 
 
 @app.get("/api/chat/history")
-async def get_chat_history(limit: int = 50, offset: int = 0):
+async def get_chat_history(
+    limit: int = 50, 
+    offset: int = 0,
+    token: Optional[str] = None
+):
     """
-    获取对话记录（仅开发环境）
+    获取对话记录
     
     Args:
         limit: 返回记录数量（默认50，最大100）
         offset: 偏移量（默认0）
+        token: 访问令牌（生产环境必需，开发环境可选）
+    
+    生产环境访问：需要在查询参数中提供 token，值为 AI_BUILDER_TOKEN
+    开发环境访问：可以直接访问，无需 token
     """
+    # 生产环境需要验证 token
     if not IS_DEV:
-        raise HTTPException(status_code=403, detail="此功能仅在开发环境中可用")
+        if not token:
+            raise HTTPException(
+                status_code=401, 
+                detail="生产环境需要提供访问令牌。请在 URL 中添加 ?token=YOUR_TOKEN"
+            )
+        
+        # 验证 token
+        expected_token = os.getenv("AI_BUILDER_TOKEN")
+        if not expected_token or token != expected_token:
+            raise HTTPException(status_code=403, detail="无效的访问令牌")
     
     chat_history = load_json_file(CHAT_HISTORY_FILE, [])
     
