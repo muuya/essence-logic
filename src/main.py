@@ -712,25 +712,40 @@ async def get_feedback_stats():
 
 
 @app.get("/api/chat/history")
-async def get_chat_history(limit: int = 50, offset: int = 0, token: Optional[str] = None):
+async def get_chat_history(
+    limit: int = 50, 
+    offset: int = 0, 
+    token: Optional[str] = None,
+    request: Request = None
+):
     """
     获取对话记录
     
     Args:
         limit: 返回记录数量（默认50，最大100）
         offset: 偏移量（默认0）
-        token: 访问令牌（生产环境必需，开发环境可选）
+        token: 访问令牌（优先从查询参数，也可从 X-Admin-Token Header）
+        request: FastAPI Request 对象（用于读取 Header）
     
     注意：
     - 开发环境：可以直接访问
     - 生产环境：需要提供正确的访问令牌（通过环境变量 ADMIN_TOKEN 设置）
+    - 令牌可以通过查询参数或 HTTP Header (X-Admin-Token) 传递
     """
     # 生产环境需要验证 token
     if not IS_DEV:
         admin_token = os.getenv("ADMIN_TOKEN")
         if not admin_token:
             raise HTTPException(status_code=403, detail="生产环境需要设置 ADMIN_TOKEN 环境变量")
-        if not token or token != admin_token:
+        
+        # 优先从 Header 读取令牌（更安全），其次从查询参数
+        provided_token = None
+        if request:
+            provided_token = request.headers.get("X-Admin-Token")
+        if not provided_token:
+            provided_token = token
+        
+        if not provided_token or provided_token != admin_token:
             raise HTTPException(status_code=401, detail="无效的访问令牌")
     
     chat_history = load_json_file(CHAT_HISTORY_FILE, [])
