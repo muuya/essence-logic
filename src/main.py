@@ -522,42 +522,91 @@ async def chat(request: ChatRequest, http_request: Request):
 
 # 数据存储目录
 DATA_DIR = Path(__file__).parent.parent / "data"
-DATA_DIR.mkdir(exist_ok=True)
+try:
+    DATA_DIR.mkdir(exist_ok=True)
+    logger.info(f"数据目录已初始化: {DATA_DIR} (存在: {DATA_DIR.exists()}, 可写: {os.access(DATA_DIR, os.W_OK)})")
+except Exception as e:
+    logger.error(f"创建数据目录失败 {DATA_DIR}: {e}")
+    raise
+
 FEEDBACK_FILE = DATA_DIR / "feedback.json"
 SCENARIO_FILE = DATA_DIR / "scenarios.json"
 CHAT_HISTORY_FILE = DATA_DIR / "chat_history.json"
+
+# 记录文件路径（启动时）
+logger.info(f"聊天历史文件路径: {CHAT_HISTORY_FILE} (存在: {CHAT_HISTORY_FILE.exists()})")
 
 
 def load_json_file(file_path: Path, default: list = None):
     """加载JSON文件"""
     if default is None:
         default = []
+    
+    logger.debug(f"尝试加载文件: {file_path} (存在: {file_path.exists()})")
+    
     if file_path.exists():
         try:
+            file_size = file_path.stat().st_size
+            logger.debug(f"文件大小: {file_size} 字节")
+            
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 # 确保返回的是列表
                 if not isinstance(data, list):
                     logger.warning(f"文件 {file_path} 不是列表格式，返回默认值")
                     return default
+                
+                logger.debug(f"成功加载文件 {file_path}，包含 {len(data)} 条记录")
                 return data
         except json.JSONDecodeError as e:
             logger.error(f"JSON解析失败 {file_path}: {e}")
             return default
-        except Exception as e:
-            logger.error(f"加载文件失败 {file_path}: {e}")
+        except PermissionError as e:
+            logger.error(f"文件权限错误 {file_path}: {e}")
             return default
+        except Exception as e:
+            logger.error(f"加载文件失败 {file_path}: {e}", exc_info=True)
+            return default
+    else:
+        logger.debug(f"文件不存在 {file_path}，返回默认值")
+    
     return default
 
 
 def save_json_file(file_path: Path, data: list):
     """保存JSON文件"""
     try:
-        with open(file_path, 'w', encoding='utf-8') as f:
+        # 检查目录是否存在和可写
+        parent_dir = file_path.parent
+        if not parent_dir.exists():
+            logger.warning(f"父目录不存在，尝试创建: {parent_dir}")
+            parent_dir.mkdir(parents=True, exist_ok=True)
+        
+        if not os.access(parent_dir, os.W_OK):
+            logger.error(f"目录不可写: {parent_dir}")
+            return False
+        
+        logger.debug(f"保存文件到: {file_path} (数据条数: {len(data)})")
+        
+        # 使用临时文件确保原子性写入
+        temp_file = file_path.with_suffix('.tmp')
+        with open(temp_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        # 原子性重命名
+        temp_file.replace(file_path)
+        
+        file_size = file_path.stat().st_size
+        logger.info(f"文件保存成功: {file_path} (大小: {file_size} 字节, 记录数: {len(data)})")
         return True
+    except PermissionError as e:
+        logger.error(f"文件权限错误 {file_path}: {e}")
+        return False
+    except OSError as e:
+        logger.error(f"文件系统错误 {file_path}: {e}")
+        return False
     except Exception as e:
-        logger.error(f"保存文件失败 {file_path}: {e}")
+        logger.error(f"保存文件失败 {file_path}: {e}", exc_info=True)
         return False
 
 
@@ -572,7 +621,10 @@ def save_chat_history(user_message: str, assistant_message: str, client_ip: str,
         message_count: 消息数量（对话轮数）
     """
     try:
+        logger.info(f"开始保存对话记录 | IP: {client_ip} | 消息数: {message_count} | 文件: {CHAT_HISTORY_FILE}")
+        
         chat_history = load_json_file(CHAT_HISTORY_FILE, [])
+        logger.debug(f"当前历史记录数: {len(chat_history)}")
         
         chat_record = {
             "timestamp": datetime.now().isoformat(),
@@ -589,11 +641,14 @@ def save_chat_history(user_message: str, assistant_message: str, client_ip: str,
         # 只保留最近 1000 条记录（避免文件过大）
         if len(chat_history) > 1000:
             chat_history = chat_history[-1000:]
+            logger.debug(f"历史记录超过1000条，已截断到最新1000条")
         
         if save_json_file(CHAT_HISTORY_FILE, chat_history):
-            logger.debug(f"对话记录已保存 | IP: {client_ip} | 消息数: {message_count}")
+            logger.info(f"✅ 对话记录保存成功 | IP: {client_ip} | 消息数: {message_count} | 用户消息: {user_message[:50]}...")
+        else:
+            logger.error(f"❌ 对话记录保存失败 | IP: {client_ip} | 消息数: {message_count}")
     except Exception as e:
-        logger.error(f"保存对话记录失败: {e}")
+        logger.error(f"保存对话记录异常: {e}", exc_info=True)
 
 
 @app.post("/api/feedback")
@@ -711,6 +766,85 @@ async def get_feedback_stats():
     return stats
 
 
+@app.get("/api/debug/data-status")
+async def get_data_status(request: Request = None):
+    """
+    诊断端点：检查数据目录和文件状态
+    
+    注意：此端点需要 ADMIN_TOKEN（生产环境）或仅在开发环境可用
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # 生产环境需要验证 token
+    if not IS_DEV:
+        admin_token = os.getenv("ADMIN_TOKEN")
+        if not admin_token:
+            raise HTTPException(status_code=403, detail="生产环境需要设置 ADMIN_TOKEN 环境变量")
+        
+        provided_token = None
+        if request:
+            provided_token = request.headers.get("X-Admin-Token")
+        if not provided_token:
+            provided_token = request.query_params.get("token")
+        
+        if not provided_token or provided_token != admin_token:
+            raise HTTPException(status_code=401, detail="无效的访问令牌")
+    
+    try:
+        # 检查数据目录
+        dir_exists = DATA_DIR.exists()
+        dir_writable = os.access(DATA_DIR, os.W_OK) if dir_exists else False
+        dir_readable = os.access(DATA_DIR, os.R_OK) if dir_exists else False
+        
+        # 检查文件状态
+        chat_file_exists = CHAT_HISTORY_FILE.exists()
+        chat_file_size = CHAT_HISTORY_FILE.stat().st_size if chat_file_exists else 0
+        chat_file_readable = os.access(CHAT_HISTORY_FILE, os.R_OK) if chat_file_exists else False
+        chat_file_writable = os.access(CHAT_HISTORY_FILE, os.W_OK) if chat_file_exists else False
+        
+        # 尝试读取文件内容
+        chat_history_count = 0
+        try:
+            chat_history = load_json_file(CHAT_HISTORY_FILE, [])
+            chat_history_count = len(chat_history) if isinstance(chat_history, list) else 0
+        except Exception as e:
+            logger.error(f"读取聊天历史文件失败: {e}")
+        
+        # 获取环境信息
+        environment = os.getenv("ENVIRONMENT", "unknown")
+        working_dir = os.getcwd()
+        
+        status = {
+            "environment": environment,
+            "working_directory": working_dir,
+            "data_directory": {
+                "path": str(DATA_DIR),
+                "exists": dir_exists,
+                "readable": dir_readable,
+                "writable": dir_writable,
+                "absolute_path": str(DATA_DIR.resolve())
+            },
+            "chat_history_file": {
+                "path": str(CHAT_HISTORY_FILE),
+                "exists": chat_file_exists,
+                "size_bytes": chat_file_size,
+                "size_kb": round(chat_file_size / 1024, 2),
+                "readable": chat_file_readable,
+                "writable": chat_file_writable,
+                "record_count": chat_history_count,
+                "absolute_path": str(CHAT_HISTORY_FILE.resolve())
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        logger.info(f"数据状态检查 | IP: {client_ip} | 记录数: {chat_history_count}")
+        return status
+        
+    except Exception as e:
+        logger.error(f"数据状态检查失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"检查失败: {str(e)}")
+
+
 @app.get("/api/chat/history")
 async def get_chat_history(
     limit: int = 50, 
@@ -732,10 +866,14 @@ async def get_chat_history(
     - 生产环境：需要提供正确的访问令牌（通过环境变量 ADMIN_TOKEN 设置）
     - 令牌可以通过查询参数或 HTTP Header (X-Admin-Token) 传递
     """
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info(f"收到获取对话记录请求 | IP: {client_ip} | limit={limit}, offset={offset}")
+    
     # 生产环境需要验证 token
     if not IS_DEV:
         admin_token = os.getenv("ADMIN_TOKEN")
         if not admin_token:
+            logger.error("生产环境 ADMIN_TOKEN 未设置")
             raise HTTPException(status_code=403, detail="生产环境需要设置 ADMIN_TOKEN 环境变量")
         
         # 优先从 Header 读取令牌（更安全），其次从查询参数
@@ -746,12 +884,15 @@ async def get_chat_history(
             provided_token = token
         
         if not provided_token or provided_token != admin_token:
+            logger.warning(f"无效的访问令牌 | IP: {client_ip}")
             raise HTTPException(status_code=401, detail="无效的访问令牌")
     
+    logger.debug(f"读取对话记录文件: {CHAT_HISTORY_FILE}")
     chat_history = load_json_file(CHAT_HISTORY_FILE, [])
     
     # 确保是列表
     if not isinstance(chat_history, list):
+        logger.warning(f"对话记录不是列表格式，重置为空列表")
         chat_history = []
     
     # 限制最大返回数量
@@ -761,6 +902,8 @@ async def get_chat_history(
     total = len(chat_history)
     start = max(0, total - offset - limit)
     end = total - offset
+    
+    logger.info(f"返回对话记录 | 总数: {total} | 返回: {len(chat_history[start:end])} 条")
     
     return {
         "total": total,
